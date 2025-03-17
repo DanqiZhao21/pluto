@@ -34,6 +34,11 @@ from ..post_processing.emergency_brake import EmergencyBrake
 from ..post_processing.trajectory_evaluator import TrajectoryEvaluator
 from ..scenario_manager.scenario_manager import ScenarioManager
 from .ml_planner_utils import global_trajectory_to_states, load_checkpoint
+#..表示相对导入
+
+'''
+利用深度学习模型生成最优驾驶轨迹，同时评估候选轨迹的安全性和规则合规性。
+'''
 
 
 class PlutoPlanner(AbstractPlanner):
@@ -48,7 +53,7 @@ class PlutoPlanner(AbstractPlanner):
         use_gpu=True,
         save_dir=None,
         candidate_subsample_ratio: int = 0.5,
-        candidate_min_num: int = 1,
+        candidate_min_num: int = 1,#候选轨迹限制
         candidate_max_num: int = 20,
         eval_dt: float = 0.1,
         eval_num_frames: int = 80,
@@ -103,12 +108,15 @@ class PlutoPlanner(AbstractPlanner):
             self.video_dir.mkdir(exist_ok=True, parents=True)
 
     @torch.no_grad()
+    
     def _infer_model(self, features: FeaturesType) -> npt.NDArray[np.float32]:
         """
         Makes a single inference on a Pytorch/Torchscript model.
 
         :param features: dictionary of feature types
         :return: predicted trajectory poses as a numpy array
+        输入：利用深度学习模型对输入特征进行推理，
+        输出：返回预测的驾驶轨迹
         """
         # Propagate model
         action = self._model_loader.infer(features)
@@ -117,12 +125,19 @@ class PlutoPlanner(AbstractPlanner):
         return action.astype(np.float64)
 
     def initialize(self, initialization: PlannerInitialization) -> None:
-        """Inherited, see superclass."""
+        
+        """Inherited, see superclass.
+        初始化规划器，包括加载模型、设置场景管理器和规划器特性构建器。"""
+        
         torch.set_grad_enabled(False)
+        #预测输出：利用模型参数对输入数据进行前向传播  ，生成预测结果。
+        # 效率优先：推理时并不需要优化模型参数，因此可以跳过梯度计算 。
 
         if self._planner_ckpt is not None:
             self._planner.load_state_dict(load_checkpoint(self._planner_ckpt))
-
+            
+        #设置模型为评估模式（禁用 dropout、batch normalization 的训练特性）
+        # 并将其加载到指定的计算设备（CPU/GPU）。
         self._planner.eval()
         self._planner = self._planner.to(self.device)
 
@@ -159,10 +174,12 @@ class PlutoPlanner(AbstractPlanner):
 
         start_time = time.perf_counter()
 
+        #更新车辆状态与可行域
         ego_state = current_input.history.ego_states[-1]
         self._scenario_manager.update_ego_state(ego_state)
         self._scenario_manager.update_drivable_area_map()
-
+        
+        #轨迹计算的核心逻辑
         planning_trajectory = self._run_planning_once(current_input)
 
         self._inference_runtimes.append(time.perf_counter() - start_time)
@@ -170,40 +187,58 @@ class PlutoPlanner(AbstractPlanner):
         return planning_trajectory
 
     def _run_planning_once(self, current_input: PlannerInput):
+        
+        
+        #接收一个 PlannerInput 类型的参数 current_input，
+        # PlannerInput：
+        # iteration: SimulationIteration  # Iteration and time in a simulation progress
+        # history: SimulationHistoryBuffer  # Rolling buffer containing past observations and states.
+        # traffic_light_data: Optional[List[TrafficLightStatusData]] = None  # The traffic light status data
+        
         ego_state = current_input.history.ego_states[-1]
-
+        #提取自车状态
         planner_feature = self._planner_feature_builder.get_features_from_simulation(
             current_input, self._initialization
         )
-
-        planner_feature_torch = planner_feature.collate(
+        #提取所需规划特征
+        
+        planner_feature_torch = planner_feature.collate_for_simulation(
             [planner_feature.to_feature_tensor()]
         ).to_device(self.device)
-
-        out = self._planner.forward(planner_feature_torch.data)
+        #转化为pytorch张量
+        
+        out = self._planner.forward(planner_feature_torch.data)#前向推理
+        
         candidate_trajectories = (
             out["candidate_trajectories"][0].cpu().numpy().astype(np.float64)
         )
         probability = out["probability"][0].cpu().numpy()
-
+        
+        #是否需要预测
         if self._use_prediction:
             predictions = out["output_prediction"][0].cpu().numpy()
         else:
             predictions = None
-
+            
+        #是否包含无关参考轨迹
         ref_free_trajectory = (
             (out["output_ref_free_trajectory"][0].cpu().numpy().astype(np.float64))
             if "output_ref_free_trajectory" in out
             else None
         )
-
+        
+        # 对候选轨迹进行裁剪，去除不合适的轨迹，
+        # 通常是根据概率、参考无关轨迹等进行筛选。
+        # 返回裁剪后的轨迹和学习评分。
         candidate_trajectories, learning_based_score = self._trim_candidates(
             candidate_trajectories,
             probability,
             current_input.history.ego_states[-1],
             ref_free_trajectory,
         )
-
+        print(f"learning-score{learning_based_score}")
+        
+        #计算基于规则的评分。评估指标包括交通信号、检测到的障碍物、车道信息等。
         rule_based_scores = self._trajectory_evaluator.evaluate(
             candidate_trajectories=candidate_trajectories,
             init_ego_state=current_input.history.ego_states[-1],
@@ -218,21 +253,38 @@ class PlutoPlanner(AbstractPlanner):
                 self._scenario_manager.get_cached_reference_lines(), ego_state
             ),
         )
+        print(f"rule-score{rule_based_scores}")
+        
+#######################################Fomat1 rule+ learning############################################
 
-        final_scores = (
-            rule_based_scores + self._learning_based_score_weight * learning_based_score
-        )
+        # final_scores = (
+        #     rule_based_scores + self._learning_based_score_weight * learning_based_score
+        # )#确定最好的路径评分  #  learning_based_score_weight: 0.3
+        # print(f"【 rule+learning 】finel-score : {rule_based_scores} + {self._learning_based_score_weight} * {learning_based_score} = {final_scores}")
+        # best_candidate_idx = final_scores.argmax()
+        
+###########################################################################################################
 
+########################################Format2 only learning############################################
+
+        final_scores = learning_based_score
+        print(f"【only learning 】 finel-score : { final_scores}")
         best_candidate_idx = final_scores.argmax()
+        
+###########################################################################################################
 
+        
+        #检查是否会发生碰撞，否则刹车
         trajectory = self._emergency_brake.brake_if_emergency(
             ego_state,
             self._trajectory_evaluator.time_to_at_fault_collision(best_candidate_idx),
             candidate_trajectories[best_candidate_idx],
         )
 
-        # no emergency
+        # no emergency无碰撞   则进行产值并输出平滑轨迹
         if trajectory is None:
+            # candidate_trajectories: (n_ref, n_mode, 80, 3)
+            # probability: (n_ref, n_mode)
             trajectory = candidate_trajectories[best_candidate_idx, 1:]
             trajectory = InterpolatedTrajectory(
                 global_trajectory_to_states(
@@ -264,6 +316,7 @@ class PlutoPlanner(AbstractPlanner):
 
         return trajectory
 
+    #self._topk]选择前k条轨迹
     def _trim_candidates(
         self,
         candidate_trajectories: np.ndarray,
@@ -274,14 +327,17 @@ class PlutoPlanner(AbstractPlanner):
         """
         candidate_trajectories: (n_ref, n_mode, 80, 3)
         probability: (n_ref, n_mode)
+        _topk=20
         """
+        # import ipdb; ipdb.set_trace() 
         if len(candidate_trajectories.shape) == 4:
             n_ref, n_mode, T, C = candidate_trajectories.shape
-            candidate_trajectories = candidate_trajectories.reshape(-1, T, C)
-            probability = probability.reshape(-1)
-
+            candidate_trajectories = candidate_trajectories.reshape(-1, T, C) # (n_ref*n_mode, 80, 3)
+            probability = probability.reshape(-1) # # (1,n_ref*n_mode)
+            #reshape(-1) 默认按照 行优先（C 语言风格，row-major order） 展开，
+            # 即 先按行 (row) 展开，再按列 (column) 展开，再按更高维展开。
         sorted_idx = np.argsort(-probability)
-        sorted_candidate_trajectories = candidate_trajectories[sorted_idx][: self._topk]
+        sorted_candidate_trajectories = candidate_trajectories[sorted_idx][: self._topk]#选择前top_k条
         sorted_probability = probability[sorted_idx][: self._topk]
         sorted_probability = softmax(sorted_probability)
 
@@ -376,6 +432,10 @@ class PlutoPlanner(AbstractPlanner):
         }
 
     def _get_ego_baseline_path(self, reference_lines, ego_state: EgoState):
+        '''
+        根据给定的参考线数据和车辆当前的状态（ego_state），
+        确定车辆当前位置最接近的参考线，并从该参考线生成一条基准路径
+        '''
         init_ref_points = np.array([r[0] for r in reference_lines], dtype=np.float64)
 
         init_distance = np.linalg.norm(

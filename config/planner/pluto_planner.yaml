@@ -13,6 +13,10 @@ pluto_planner:
     _target_: src.models.pluto.pluto_model.PlanningModel
     _convert_: "all"
 
+    
+# feature_builder:
+#   _target_: src.feature_builders.pluto_feature_builder.PlutoFeatureBuilder
+
     dim: 128
     state_channel: 6
     polygon_channel: 6

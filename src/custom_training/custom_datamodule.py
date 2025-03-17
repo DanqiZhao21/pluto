@@ -31,7 +31,58 @@ logger = logging.getLogger(__name__)
 
 DataModuleNotSetupError = RuntimeError('Data module has not been setup, call "setup()"')
 
+'''
+这段代码是一个数据管理模块，专门用于深度学习模型训练中的数据预处理、划分、加载等任务，
+基于 PyTorch Lightning 框架实现。它包括数据集的创建、划分（训练、验证、测试集）、数据增强、加权采样以及数据加载器（DataLoader）的初始化。
+'''
+'''
+1. 主类 CustomDataModule
+作用: 包装了数据准备的完整流程，兼容 PyTorch Lightning 的数据模块架构。
+关键功能:
+数据划分为训练、验证和测试集。
+数据集的加载和数据增强处理。
+数据加载器的配置和返回。
+适配分布式训练和加权采样等高级需求。
 
+2. 关键方法和模块
+(a) create_dataset
+功能: 创建一个自定义的数据集（ScenarioDataset）。
+细节:
+从样本中随机采样指定比例的子集。
+应用特征预处理器和可选的数据增强器。
+返回符合 torch.utils.data.Dataset 接口的对象。
+(b) distributed_weighted_sampler_init
+功能: 为每种场景类型指定权重，生成加权采样器（WeightedRandomSampler）。
+用途:
+通过加权采样控制某些场景类型的训练样本比例。
+可用于处理数据不平衡问题。
+(c) setup
+功能: 按照训练阶段（fit, test 等）初始化不同的数据集。
+细节:
+通过 splitter 将完整数据集拆分为训练、验证和测试集。
+按照指定比例随机选取样本。
+在不同阶段加载对应的数据集。
+(d) train_dataloader, val_dataloader, test_dataloader
+功能: 创建并返回 PyTorch 的 DataLoader 对象。
+细节:
+在训练阶段，支持按场景类型的权重分布加权采样。
+数据批次的整理通过自定义的 FeatureCollate 函数。
+(e) transfer_batch_to_device
+功能: 将数据从 CPU 转移到 GPU 或指定设备。
+细节:
+适配 PyTorch Lightning 的设备转移流程。
+递归将特征（FeaturesType）和目标转移到目标设备上。
+在分布式训练中能很好地处理数据在不同设备间的移动。
+
+3. 应用场景
+分布式训练: 适配 PyTorch Lightning 的多 GPU 或 TPU 环境。
+数据增强: 提供多种数据增强器（augmentors），对样本进行动态增强。
+不平衡数据: 通过 distributed_weighted_sampler_init 对不同类别（场景类型）进行加权采样，缓解数据分布不均的问题。
+高效训练: 使用多进程（通过 worker 参数）提高数据加载和处理速度。
+
+4. 改进点和新功能
+transfer_batch_to_device 方法: 新增或重写的功能，适配 PyTorch Lightning 的最新版本，以确保在设备转换时特征和目标保持正确的结构和内容。
+'''
 def create_dataset(
     samples: List[AbstractScenario],
     feature_preprocessor: FeaturePreprocessor,

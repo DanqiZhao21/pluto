@@ -3,6 +3,10 @@ from typing import Any, Callable, Dict, Optional
 import torch
 from torchmetrics import Metric
 
+'''
+MR（Miss Rate），用于评估预测轨迹的未命中率。
+未命中率是指预测的所有轨迹中，最终点与目标真实点距离超过某个阈值的比例。
+'''
 
 class MR(Metric):
     full_state_update: Optional[bool] = False

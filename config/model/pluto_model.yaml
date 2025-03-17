@@ -2,28 +2,36 @@ _target_: src.models.pluto.pluto_model.PlanningModel
 _convert_: "all"
 
 dim: 128
-state_channel: 6
+
+state_channel: 6 #可能是描述车辆状态的特征数量6
 polygon_channel: 6
 history_channel: 9
+
 history_steps: 21
 future_steps: 80
+
 encoder_depth: 4
 decoder_depth: 4
+
 drop_path: 0.2
 dropout: 0.1
-num_heads: 4
-num_modes: 12
-state_dropout: 0.75
-use_ego_history: false
+
+num_heads: 4 # 注意力机制中头的数量
+
+num_modes: 12 # 模型预测轨迹的多样性。这里设置为12，表示模型将预测12种不同的轨迹模式
+
+state_dropout: 0.75   # 状态丢弃率
+use_ego_history: false #不使用自车历史信息
+
 state_attn_encoder: true
 use_hidden_proj: false
 
 feature_builder:
   _target_: src.feature_builders.pluto_feature_builder.PlutoFeatureBuilder
   _convert_: "all"
-  radius: 120
-  history_horizon: 2
-  future_horizon: 8
-  sample_interval: 0.1
-  max_agents: 48
-  build_reference_line: true
+  radius: 120 # 半径参数，可能与传感器或观察范围有关
+  history_horizon: 2 # 历史轨迹的时间范围（单位：秒）2s 21步。0.1秒为一个步长
+  future_horizon: 8 # 未来轨迹的时间范围（单位：秒） 8s  80步
+  sample_interval: 0.1 # 采样间隔，单位是秒
+  max_agents: 48 # 最大代理数量（例如场景中的其他车辆或物体）
+  build_reference_line: true # 是否构建参考线（例如道路中心线）

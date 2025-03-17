@@ -28,9 +28,10 @@ logger = logging.getLogger(__name__)
 # If set, use the env. variable to overwrite the default dataset and experiment paths
 set_default_path()
 
-# If set, use the env. variable to overwrite the Hydra config
-CONFIG_PATH = os.getenv("NUPLAN_HYDRA_CONFIG_PATH", "config/simulation")
 
+# # If set, use the env. variable to overwrite the Hydra config
+# CONFIG_PATH = os.getenv("NUPLAN_HYDRA_CONFIG_PATH", "config/simulation")
+# print(f'The current Hydra config path is: {CONFIG_PATH}')
 
 def print_simulation_results(file=None):
     if file is not None:
@@ -125,6 +126,10 @@ def main(cfg: DictConfig) -> None:
     :param cfg: Configuration that is used to run the experiment.
         Already contains the changes merged from the experiment's config to default config.
     """
+    config_path = os.getenv("NUPLAN_HYDRA_CONFIG_PATH", "./config")
+    print(f"Using Hydra config path: {config_path}")
+    # print(f"Loaded config: {cfg}")
+    
     assert (
         cfg.simulation_log_main_path is None
     ), "Simulation_log_main_path must not be set when running simulation."

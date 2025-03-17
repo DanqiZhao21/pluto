@@ -298,7 +298,8 @@ class NuplanScenarioRender:
             obj_id = int(obj.id)
             kwargs = {"color": "lightgray", "alpha": 0.4, "ec": None, "zorder": 0}
             if obj.get_roadblock_id() in route_roadblock_ids:
-                kwargs["color"] = "dodgerblue"
+                # kwargs["color"] = "dodgerblue"#这里是自车所在的车道
+                kwargs["color"] = "PaleGoldenrod"#换成了淡黄色
                 kwargs["alpha"] = 0.1
                 kwargs["zorder"] = 1
             ax.add_artist(self._polygon_to_patch(obj.polygon, **kwargs))

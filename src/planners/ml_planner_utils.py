@@ -49,6 +49,8 @@ def global_trajectory_to_states(
         agent_states.insert(0, ego_state)
     else:
         init_state = deepcopy(agent_states[0])
+        init_state = copy(agent_states[0])
+        init_state = agent_states[0]
         init_state._time_point = ego_state.time_point
         agent_states.insert(0, init_state)
 

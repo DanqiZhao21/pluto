@@ -45,6 +45,7 @@ DYNAMIC_OBJECT_TYPES = {
 
 
 class ScenarioManager:
+    #管理自动驾驶场景，包括 可行驶区域、障碍物检测、自车路径计算以及前方障碍物分析
     def __init__(
         self,
         map_api,

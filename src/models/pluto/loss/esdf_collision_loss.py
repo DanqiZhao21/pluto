@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 
-class ESDFCollisionLoss(nn.Module):
+class ESDFCollisionLoss(nn.Module):#**有符号距离场（SDF）**的碰撞损失函数
     def __init__(
         self,
         num_circles=3,
@@ -18,7 +18,7 @@ class ESDFCollisionLoss(nn.Module):
         super().__init__()
 
         ego_length = ego_front_length + ego_rear_length
-        interval = ego_length / num_circles
+        interval = ego_length / num_circles #圆形之间的间隔
 
         self.N = num_circles
         self.width = ego_width

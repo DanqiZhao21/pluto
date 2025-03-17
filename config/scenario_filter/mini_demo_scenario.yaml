@@ -4,7 +4,10 @@ _convert_: 'all'
 scenario_types: null                # List of scenario types to include
 scenario_tokens: null               # List of scenario tokens to include
 
-log_names: null                     # Filter scenarios by log names
+log_names: null
+# - 2021.05.12.22.28.35_veh-35_00620_01164
+# - 2021.05.12.22.00.38_veh-35_01008_01518                # Filter scenarios by log names
+# - 2021.05.12.22.28.35_veh-35_00620_01164.db
 map_names: null                     # Filter scenarios by map names
 
 num_scenarios_per_type: 1        # Number of scenarios per type

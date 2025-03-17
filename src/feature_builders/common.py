@@ -22,6 +22,12 @@ HALF_WIDTH = EGO_PARAMS.half_width
 FRONT_LENGTH = EGO_PARAMS.front_length
 REAR_LENGTH = EGO_PARAMS.rear_length
 
+'''
+处理车辆在环境中的空间几何关系。
+生成车辆运动轨迹的多段线插值，用于路径规划或轨迹回放。
+在仿真或实际应用中，根据车辆朝向动态调整几何形状。
+'''
+
 
 class PolylineElements(IntEnum):
     """

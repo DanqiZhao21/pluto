@@ -4,10 +4,13 @@ py_func: train
 objective_aggregate_mode: mean
 
 defaults:
-        - override /data_augmentation:
-                  - contrastive_scenario_generator
+        # - override /data_augmentation:
+        #           - contrastive_scenario_generator
         - override /splitter: nuplan
-        - override /model: pluto_model
+        - override /model: pluto_model  #带了使用PlutoFeatureBuilder
         - override /scenario_filter: training_scenarios_tiny
+        # - override /scenario_filter: mini_demo_scenario_copy
         - override /custom_trainer: pluto_trainer
         - override /lightning: custom_lightning
+
+        

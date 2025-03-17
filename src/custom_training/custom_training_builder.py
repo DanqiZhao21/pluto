@@ -38,6 +38,20 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 from .custom_datamodule import CustomDataModule
 
 logger = logging.getLogger(__name__)
+'''
+实现了一个基于 PyTorch Lightning 框架的训练引擎，
+主要用于构建深度学习模型训练的完整流程，包括数据处理、模型定义、训练设置等。
+'''
+
+'''
+整体结构
+代码的目的是将深度学习模型的训练流程模块化和参数化，便于用户通过配置文件（cfg）定制训练过程。主要模块包括：
+
+数据加载与处理（DataModule）。
+模型定义（LightningModule）。
+训练设置与控制（Trainer）。
+配置文件的动态调整（update_config_for_training）。
+'''
 
 
 def update_config_for_training(cfg: DictConfig) -> None:
@@ -183,6 +197,11 @@ def build_custom_trainer(cfg: DictConfig) -> pl.Trainer:
     :return: built object.
     """
     params = cfg.lightning.trainer.params
+    
+    
+    
+    
+    
 
     # callbacks = build_callbacks(cfg)
     callbacks = [
@@ -227,6 +246,9 @@ def build_custom_trainer(cfg: DictConfig) -> pl.Trainer:
         )
 
     trainer = pl.Trainer(
+        # accelerator="gpu",  # 启用 GPU 训练
+        # devices=3,          # 使用 1 块 GPU（如果要多卡训练，可以改成 devices=2 或 "auto"）
+        # precision=16,       # 启用 FP16 混合精度训练
         callbacks=callbacks,
         logger=training_logger,
         **params,

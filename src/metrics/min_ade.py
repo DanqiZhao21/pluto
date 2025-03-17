@@ -10,6 +10,8 @@ class minADE(Metric):
     """Minimum Average Displacement Error
     minADE: The average L2 distance between the best forecasted trajectory and the ground truth.
             The best here refers to the trajectory that has the minimum endpoint error.
+            
+            用于计算 Minimum Average Displacement Error (minADE)，通常用于轨迹预测任务中评价预测路径的准确性
     """
 
     full_state_update: Optional[bool] = False
@@ -17,7 +19,7 @@ class minADE(Metric):
 
     def __init__(
         self,
-        k=6,
+        k=6,#k: 从模型预测中选择的前 k 条轨迹，用于计算 minADE
         compute_on_step: bool = True,
         dist_sync_on_step: bool = False,
         process_group: Optional[Any] = None,
@@ -43,7 +45,7 @@ class minADE(Metric):
             ).mean(-1)
             min_ade = ade.min(-1)[0]
             self.sum += min_ade.sum()
-            self.count += pred.size(0)
+            self.count += pred.size(0)#size(0) 获取张量第一个维度的大小，即 批次大小（batch_size）
 
     def compute(self) -> torch.Tensor:
         return self.sum / self.count

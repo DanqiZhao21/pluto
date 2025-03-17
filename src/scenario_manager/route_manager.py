@@ -107,22 +107,56 @@ class RouteManager:
 
     def get_reference_lines(self, ego_state: EgoState, interval=1.0, length=100):
         discrete_paths = []
+        #已经排除，不可能为空；
+        # if ego_state is None:
+        #     print("🚨 Error: ego_state is None! ")
 
-        for lane in self._get_candidate_starting_lane(ego_state):
-            discrete_paths.extend(
-                self.find_all_candidate_routes(ego_state, lane, maximum_length=length)
-            )
+        
+        #检查candidate_lines###############################################################
+        candidate_lanes = self._get_candidate_starting_lane(ego_state)
+        # print(f"线线线线线线线Candidate starting lanes: {candidate_lanes}")
+        # if not candidate_lanes:
+            # print("#########################没有candidateline#####################")
+            # assert candidate_lanes, "No candidate lanes found!"
+        ##################################################################################
+        
 
+        # for lane in self._get_candidate_starting_lane(ego_state):
+        #     discrete_paths.extend(
+        #         self.find_all_candidate_routes(ego_state, lane, maximum_length=length)
+        #     )
+
+        ##########################################检查discrete_paths
+        for lane in candidate_lanes:
+            paths = self.find_all_candidate_routes(ego_state, lane, maximum_length=length)
+            # print(f"线线线线线线线Found {len(paths)} paths for lane {lane}")
+            discrete_paths.extend(paths)
+
+        # if not discrete_paths:
+            # print(" 没有 discrete_paths.")
+
+        ##################################################################################
+        
+        
         trimmed_paths, trimmed_path_length = [], []
         for discrete_path in discrete_paths:
             path, path_len = self._trim_discrete_path(ego_state, discrete_path, length)
             trimmed_paths.append(path)
             trimmed_path_length.append(path_len)
 
+        # print(f"线线线线线线线Trimmed paths before filtering: {len(trimmed_paths)}")
+        
         length_mask = np.array(trimmed_path_length) > 0.8 * length
+        # print(f"线线线线线线线Length mask: {length_mask}")
+
         if length_mask.any() and not length_mask.all():
             trimmed_paths = [trimmed_paths[i] for i in np.where(length_mask)[0]]
+            # print(f"线线线线线线线Trimmed paths after length filtering: {len(trimmed_paths)}")
+        # if not trimmed_paths:
+            # print("线线线线线线线All paths were filtered out due to insufficient length.")
 
+                
+        
         remove_index = set()
         for i in range(len(trimmed_paths)):
             for j in range(i + 1, len(trimmed_paths)):
@@ -313,27 +347,63 @@ class RouteManager:
     def _get_candidate_starting_lane(self, ego_state: EgoState):
         lanes = self._map_api.get_proximal_map_objects(
             ego_state.center.point,
-            3,
+            6,#原先为3m
             [SemanticMapLayer.LANE, SemanticMapLayer.LANE_CONNECTOR],
         )
-        lanes = lanes[SemanticMapLayer.LANE_CONNECTOR] + lanes[SemanticMapLayer.LANE]
-        lanes = [
-            lane
-            for lane in lanes
-            if lane.get_roadblock_id() in self._route_roadblock_dict
-            and lane.baseline_path.length > 2
-            and self._get_lane_angle_error(lane, ego_state) < np.pi / 2
+        
+        # print(f"type of lanes: {type(lanes)}")
+        # print(f"获取到的车道数量first: {len(lanes)}")#len() 函数对于字典返回的是字典中 键的数量
+        # print("获取到的车道数据字典:")
+        # print(lanes)
+        
+        
+        # 查看返回的车道数据
+        # print(f"LANE: {lanes.get(SemanticMapLayer.LANE)}")
+        # print(f"LANE_CONNECTOR: {lanes.get(SemanticMapLayer.LANE_CONNECTOR)}")
+            
+        # lanes = lanes[SemanticMapLayer.LANE_CONNECTOR] + lanes[SemanticMapLayer.LANE]
+        
+        lanes = lanes.get(SemanticMapLayer.LANE_CONNECTOR, []) + lanes.get(SemanticMapLayer.LANE, [])
+        # print(f"获取到的车道数量second: {len(lanes)}")
+        #逐步放低筛选条件
+        # 定义多个筛选条件，逐步放低要求
+        filter_conditions = [
+            {"roadblock": True, "length": 2, "angle": np.pi / 2},  # 最严格的条件
+            {"roadblock": False, "length": 1, "angle": np.pi / 1.5},  # 放宽条件
+            {"roadblock": False, "length": 0, "angle": (np.pi)*2},  # 最宽松的条件
         ]
+        
+        filtered_lanes = []
+        
+        for condition in filter_conditions:
+            # print(f"使用筛选条件: {condition}")
+            
+            # 筛选符合条件的车道
+            lanes = [
+                lane
+                for lane in lanes
+                if (not condition["roadblock"] or lane.get_roadblock_id() in self._route_roadblock_dict)
+                and lane.baseline_path.length > condition["length"]
+                and self._get_lane_angle_error(lane, ego_state) < condition["angle"]
+            ]
+            
+            
+            # 如果有车道，返回筛选结果
+            if lanes:
+                filtered_lanes = lanes
+                break
+            
+        # print(f"经过筛选后的车道数量: {len(lanes)}")
 
-        # merge repeated lanes
         keep_ids = [lane.id for lane in lanes]
 
         for lane in lanes:
             for next_lane in lane.outgoing_edges:
                 if next_lane.id in keep_ids:
                     keep_ids.remove(next_lane.id)
-
+        # print(f"经过筛选后的车道id数组的长度: {len(keep_ids)}")
         merged_lanes = [self._route_lane_dict[id] for id in keep_ids]
+        # print(f"最终车道数: {len(merged_lanes)}")
         return merged_lanes
 
     def _get_lane_angle_error(self, lane: LaneGraphEdgeMapObject, ego_state: EgoState):

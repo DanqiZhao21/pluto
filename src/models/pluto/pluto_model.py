@@ -21,6 +21,11 @@ from .modules.planning_decoder import PlanningDecoder
 from .layers.mlp_layer import MLPLayer
 
 # no meaning, required by nuplan
+#Trajectory sampling config. The variables are set as optional, 
+# to make sure we can deduce last variable if only two are set.
+        
+    # 该类的主要目的是确保轨迹采样配置（num_poses、time_horizon 和 interval_length）的一致性，
+    # 并根据提供的参数自动推导出缺失的参数。如果参数之间有不一致，代码会抛出异常来避免无效配置
 trajectory_sampling = TrajectorySampling(num_poses=8, time_horizon=8, interval_length=1)
 
 
@@ -61,9 +66,9 @@ class PlanningModel(TorchModuleWrapper):
         self.radius = feature_builder.radius
         self.ref_free_traj = ref_free_traj
 
-        self.pos_emb = FourierEmbedding(3, dim, 64)
+        self.pos_emb = FourierEmbedding(3, dim, 64)#傅里叶特征嵌入(输入维度，输出维度，)
 
-        self.agent_encoder = AgentEncoder(
+        self.agent_encoder = AgentEncoder( #智能体编码器
             state_channel=state_channel,
             history_channel=history_channel,
             dim=dim,
@@ -74,13 +79,13 @@ class PlanningModel(TorchModuleWrapper):
             state_dropout=state_dropout,
         )
 
-        self.map_encoder = MapEncoder(
+        self.map_encoder = MapEncoder(  #地图编码
             dim=dim,
             polygon_channel=polygon_channel,
             use_lane_boundary=True,
         )
 
-        self.static_objects_encoder = StaticObjectsEncoder(dim=dim)
+        self.static_objects_encoder = StaticObjectsEncoder(dim=dim)#静态物体编码
 
         self.encoder_blocks = nn.ModuleList(
             TransformerEncoderLayer(dim=dim, num_heads=num_heads, drop_path=dp)
@@ -89,6 +94,8 @@ class PlanningModel(TorchModuleWrapper):
         self.norm = nn.LayerNorm(dim)
 
         self.agent_predictor = AgentPredictor(dim=dim, future_steps=future_steps)
+        
+        #轨迹解码器
         self.planning_decoder = PlanningDecoder(
             num_mode=num_modes,
             decoder_depth=decoder_depth,
@@ -137,15 +144,15 @@ class PlanningModel(TorchModuleWrapper):
         angle = torch.cat([agent_heading, polygon_center[..., 2]], dim=1)
         angle = (angle + math.pi) % (2 * math.pi) - math.pi
         pos = torch.cat([position, angle.unsqueeze(-1)], dim=-1)
-
+        #构建掩码
         agent_key_padding = ~(agent_mask.any(-1))
         polygon_key_padding = ~(polygon_mask.any(-1))
         key_padding_mask = torch.cat([agent_key_padding, polygon_key_padding], dim=-1)
-
+        #编码器处理
         x_agent = self.agent_encoder(data)
         x_polygon = self.map_encoder(data)
         x_static, static_pos, static_key_padding = self.static_objects_encoder(data)
-
+        #位置信息的嵌入和融合
         x = torch.cat([x_agent, x_polygon, x_static], dim=1)
 
         pos = torch.cat([pos, static_pos], dim=1)
@@ -153,13 +160,15 @@ class PlanningModel(TorchModuleWrapper):
 
         key_padding_mask = torch.cat([key_padding_mask, static_key_padding], dim=-1)
         x = x + pos_embed
-
+        #Transformer编码器，得到最终编码
         for blk in self.encoder_blocks:
             x = blk(x, key_padding_mask=key_padding_mask, return_attn_weights=False)
-        x = self.norm(x)
-
+        x = self.norm(x) 
+        
+        #预测周车未来轨迹
         prediction = self.agent_predictor(x[:, 1:A])
-
+        
+        #参考线轨迹预测
         ref_line_available = data["reference_line"]["position"].shape[1] > 0
 
         if ref_line_available:
@@ -170,7 +179,7 @@ class PlanningModel(TorchModuleWrapper):
             trajectory, probability = None, None
 
         out = {
-            "trajectory": trajectory,
+            "trajectory": trajectory,#(bs, R, M，timestep, 6)  (x,y.cos(theta),sin(theta),v_x,v_y)
             "probability": probability,  # (bs, R, M)
             "prediction": prediction,  # (bs, A-1, T, 2)
         }
@@ -183,7 +192,7 @@ class PlanningModel(TorchModuleWrapper):
                 bs, self.future_steps, 4
             )
             out["ref_free_trajectory"] = ref_free_traj
-
+        #推理模式
         if not self.training:
             if self.ref_free_traj:
                 ref_free_traj_angle = torch.arctan2(
@@ -230,3 +239,10 @@ class PlanningModel(TorchModuleWrapper):
                 )
 
         return out
+    
+    #输出的结果包含：
+    # trajectory：生成的轨迹。
+    # probability：各个候选轨迹的概率。
+    # prediction：智能体的未来轨迹预测。
+    # output_trajectory：最终选择的轨迹。
+    # output_ref_free_trajectory：生成的无参考线的轨迹（如果启用）

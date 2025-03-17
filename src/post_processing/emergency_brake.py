@@ -56,7 +56,7 @@ class EmergencyBrake:
 
         time_to_infraction = time_to_at_fault_collision
         min_brake_time = max(ego_speed / abs(self._min_long_accel) + 0.5, 3.0)
-
+        #Infraction” 的意思是 违规、违章、违反
         if time_to_infraction <= min_brake_time and ego_speed <= self._max_ego_speed:
             print("Emergency Brake")
             min_reaction_time = ego_speed / abs(self._emergency_decel) + 0.5

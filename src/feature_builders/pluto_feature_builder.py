@@ -50,17 +50,20 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
         super().__init__()
 
         self.radius = radius
-        self.history_horizon = history_horizon
-        self.future_horizon = future_horizon
-        self.history_samples = int(self.history_horizon / sample_interval)
-        self.future_samples = int(self.future_horizon / sample_interval)
+        self.history_horizon = history_horizon#2时间
+        self.future_horizon = future_horizon#8
+        self.history_samples = int(self.history_horizon / sample_interval)#2/0.1=20
+        self.future_samples = int(self.future_horizon / sample_interval)#8/0.1=80
         self.sample_interval = sample_interval
         self.ego_params = get_pacifica_parameters()
         self.length = self.ego_params.length
         self.width = self.ego_params.width
         self.max_agents = max_agents
         self.max_static_obstacles = max_static_obstacles
-        self.scenario_manager = None
+        
+        # self.scenario_manager = None
+        self.scenario_manager = {"cur": None, **{f"cur-{i}": None for i in range(1, 7)}}#创建一个字典，包含当前场景和前6个场景
+
         self.build_reference_line = build_reference_line
         self.disable_agent = disable_agent
         self.inference = None
@@ -101,34 +104,82 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
         scenario: AbstractScenario,
         iteration=0,
     ) -> AbstractModelFeature:
-        ego_cur_state = scenario.initial_ego_state
-
-        # ego features
-        past_ego_trajectory = scenario.get_ego_past_trajectory(
+        
+        # p iterations_per_scenario
+        # (wrapped_fn pid=505885) 1
+        # (wrapped_fn pid=505885) ipdb> 
+        # p iteration
+        # (wrapped_fn pid=505917) 0
+    
+        # import ipdb; ipdb.set_trace()
+        # print(f"持续时间为{scenario.duration_s}")
+        #持续时间为TimeDuration(0.0s)
+        #  p scenario.map_api
+        # (wrapped_fn pid=2078763) <nuplan.common.maps.nuplan_map.nuplan_map.NuPlanMap object at 0x74867350b730>
+        # (wrapped_fn pid=2078763) ipdb> 
+        # p scenario.log_name
+        # (wrapped_fn pid=2078744) '2021.06.09.12.39.51_veh-26_05620_06003'
+        # (wrapped_fn pid=2078744) ipdb> 
+        # p scenario.token
+        # (wrapped_fn pid=2078752) '33813f3dcfc65fef'
+        # (wrapped_fn pid=2078752) ipdb> 
+        # p scenario.scenario_name
+        # (wrapped_fn pid=2078760) '2d0b0d2913e65fdf'
+        
+        # ego_cur_state = scenario.get_ego_state_at_iteration(iteration)
+        ego_cur_state = scenario.initial_ego_state ###似乎有问题，不应该是第0帧，而是第iterration帧？
+        all_past_ego_trajectory = scenario.get_ego_past_trajectory(
             iteration=iteration,
-            time_horizon=self.history_horizon,
-            num_samples=self.history_samples,
+            time_horizon=self.history_horizon+1,
+            num_samples=self.history_samples+10, 
         )
-        future_ego_trajectory = scenario.get_ego_future_trajectory(
+        all_future_ego_trajectory = scenario.get_ego_future_trajectory(
             iteration=iteration,
             time_horizon=self.future_horizon,
             num_samples=self.future_samples,
         )
-        ego_state_list = (
-            list(past_ego_trajectory) + [ego_cur_state] + list(future_ego_trajectory)
+        all_ego_state_list = (
+            list(all_past_ego_trajectory) + [ego_cur_state] + list(all_future_ego_trajectory)
         )
+        
+        if any(state is None for state in all_ego_state_list):
+            print("Warning: Some ego states are None!")
 
-        # agents features
-        present_tracked_objects = scenario.initial_tracked_objects.tracked_objects
-        past_tracked_objects = [
+        
+        
+        # import ipdb; ipdb.set_trace()
+        
+        # p len(list(all_past_ego_trajectory))
+        # (wrapped_fn pid=2078756) 30
+        
+        
+        
+        
+        # 将all_ego_state_list中的元素按照时间顺序排列
+        ego_state_list = all_ego_state_list[-101:]
+        ego_state_list_29 = all_ego_state_list[-102:-1]
+        ego_state_list_28 = all_ego_state_list[-103:-2]
+        ego_state_list_27 = all_ego_state_list[-104:-3]
+        ego_state_list_26 = all_ego_state_list[-105:-4]
+        ego_state_list_25 = all_ego_state_list[-106:-5]
+        ego_state_list_24 = all_ego_state_list[-107:-6]
+        
+        
+       ###########################################################################################################
+        
+        # all_present_tracked_objects=scenario.get_tracked_objects_at_iteration(
+        #         iteration=iteration
+        #     )#  -> DetectionsTracks
+        all_present_tracked_objects = scenario.initial_tracked_objects.tracked_objects
+        all_past_tracked_objects = [
             tracked_objects.tracked_objects
             for tracked_objects in scenario.get_past_tracked_objects(
                 iteration=iteration,
-                time_horizon=self.history_horizon,
-                num_samples=self.history_samples,
-            )
+                time_horizon=self.history_horizon+1,
+                num_samples=self.history_samples+10,
+            )  #-> Generator[DetectionsTracks, None, None]:
         ]
-        future_tracked_objects = [
+        all_future_tracked_objects = [
             tracked_objects.tracked_objects
             for tracked_objects in scenario.get_future_tracked_objects(
                 iteration=iteration,
@@ -136,23 +187,99 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
                 num_samples=self.future_samples,
             )
         ]
-        tracked_objects_list = (
-            past_tracked_objects + [present_tracked_objects] + future_tracked_objects
+        
+        all_tracked_objects_list = (
+            all_past_tracked_objects + [all_present_tracked_objects] + all_future_tracked_objects
         )
+        
+        # 将all_tracked_objects_list中的元素按照时间顺序排列
+        tracked_objects_list = all_tracked_objects_list[-101:]
+        tracked_objects_list_29 = all_tracked_objects_list[-102:-1]
+        tracked_objects_list_28 = all_tracked_objects_list[-103:-2]
+        tracked_objects_list_27 = all_tracked_objects_list[-104:-3]
+        tracked_objects_list_26 = all_tracked_objects_list[-105:-4]
+        tracked_objects_list_25 = all_tracked_objects_list[-106:-5]
+        tracked_objects_list_24 = all_tracked_objects_list[-107:-6]
+        
+        ##########################################################################################
+        #历史的交通信息     
+        traffic_light_status=scenario.get_traffic_light_status_at_iteration(iteration)
+
+        traffic_light_status=list(traffic_light_status)
+        all_past_traffic_light_status = list(scenario.get_past_traffic_light_status_history(iteration,1, 10))#准确来说只需要过去6帧（不到一秒）此除保险器件算了过去10帧（1s）
+
+        all_traffic_lights_status_data=[]
+        for status in all_past_traffic_light_status:
+
+            all_traffic_lights_status_data.append(status.traffic_lights)
+
+        traffic_light_status_29= list(all_traffic_lights_status_data[-1])
+        traffic_light_status_28= list(all_traffic_lights_status_data[-2])
+        traffic_light_status_27= list(all_traffic_lights_status_data[-3])
+        traffic_light_status_26= list(all_traffic_lights_status_data[-4])
+        traffic_light_status_25= list(all_traffic_lights_status_data[-5])
+        traffic_light_status_24= list(all_traffic_lights_status_data[-6])
+        
+        
+        
+        # # traffic_light_status_29= all_past_traffic_light_status[-1]
+        # print(f"typr of traffic_light_status_29: {type(traffic_light_status_29)}")
+        # # typr of traffic_light_status_29: <class 'nuplan.common.maps.maps_datatypes.TrafficLightStatuses'>
+        # print(dir(traffic_light_status_29))
+        #         typr of traffic_light_status_29: <class 'nuplan.common.maps.maps_datatypes.TrafficLightStatuses'>
+        # (wrapped_fn pid=757038) ['__annotations__', '__class__', '__dataclass_fields__', '__dataclass_params__', 
+        #                          '__delattr__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__',
+        #                          '__getattribute__', '__gt__', '__hash__', '__init__', '__init_subclass__', '__le__', 
+        #                          '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', 
+        #                          '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', 'traffic_lights']
+                
+        
+        # 获取 route_roadblock_ids
+        route_roadblocks_ids_value = scenario.get_route_roadblock_ids()
+
+        # 创建字典，所有键对应的值都为 route_roadblocks_ids_value
+        route_roadblocks_ids = {f"cur-{i}": route_roadblocks_ids_value for i in range(6 + 1)}
+
+        # 额外添加 cur 键
+        route_roadblocks_ids["cur"] = route_roadblocks_ids_value
 
         data = self._build_feature(
-            present_idx=self.history_samples,
-            ego_state_list=ego_state_list,
-            tracked_objects_list=tracked_objects_list,
-            route_roadblocks_ids=scenario.get_route_roadblock_ids(),
+            # present_idx=self.history_samples, #20==》30
+            present_idx=self.history_samples, #20
+          #过去20+现在+未来 （我直接将这里的增加以下，改一下iteration即可） 将改成curent=30;然后往后倒6帧；24，25，26，27，28，29
+            ego_state_list=ego_state_list,  #过去20+现在+未来 （我直接将这里的增加以下，改一下iteration即可） 将改成curent=30;然后往后倒6帧；24，25，26，27，28，29
+            ego_state_list_29=ego_state_list_29,
+            ego_state_list_28=ego_state_list_28,
+            ego_state_list_27=ego_state_list_27,
+            ego_state_list_26=ego_state_list_26,
+            ego_state_list_25=ego_state_list_25,
+            ego_state_list_24=ego_state_list_24,
+
+            tracked_objects_list=tracked_objects_list, ##过去20+现在+未来的跟踪信息
+            tracked_objects_list_29=tracked_objects_list_29,
+            tracked_objects_list_28=tracked_objects_list_28,
+            tracked_objects_list_27=tracked_objects_list_27,
+            tracked_objects_list_26=tracked_objects_list_26,
+            tracked_objects_list_25=tracked_objects_list_25,
+            tracked_objects_list_24=tracked_objects_list_24,
+            
+            # route_roadblocks_ids=scenario.get_route_roadblock_ids(), #获得整段场景下的障碍物信息
+            route_roadblocks_ids=route_roadblocks_ids,  # 传递这个字典
+            
             map_api=scenario.map_api,
-            mission_goal=scenario.get_mission_goal(),
-            traffic_light_status=scenario.get_traffic_light_status_at_iteration(
-                iteration
-            ),
+            mission_goal=scenario.get_mission_goal(),#没啥用
+            
+            traffic_light_status=traffic_light_status,
+            traffic_light_status_29=traffic_light_status_29,
+            traffic_light_status_28=traffic_light_status_28,
+            traffic_light_status_27=traffic_light_status_27,
+            traffic_light_status_26=traffic_light_status_26,
+            traffic_light_status_25=traffic_light_status_25,
+            traffic_light_status_24=traffic_light_status_24,
+            
             inference=False,
         )
-
+        
         return data
 
     def get_features_from_simulation(
@@ -166,7 +293,7 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
         ]
 
         horizon = self.history_samples + 1
-        return self._build_feature(
+        return self._build_feature_for_simulation(
             present_idx=-1,
             ego_state_list=history.ego_states[-horizon:],
             tracked_objects_list=tracked_objects_list[-horizon:],
@@ -177,93 +304,366 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
             inference=True,
         )
 
+#######################专门用于simulation的feature_builder#######################
+    def _build_feature_for_simulation(
+            self,
+            present_idx: int,
+            ego_state_list: List[EgoState],
+            tracked_objects_list: List[TrackedObjects],
+            route_roadblocks_ids: list[int],
+            map_api: AbstractMap,
+            mission_goal: StateSE2,
+            traffic_light_status: List[TrafficLightStatusData] = None,
+            inference: bool = False,
+        ):
+            if present_idx < 0:
+                present_idx = len(ego_state_list) + present_idx
+
+            present_ego_state = ego_state_list[present_idx]
+            query_xy = present_ego_state.center
+            traffic_light_status = list(traffic_light_status)  # note: tl is a iterator
+
+            if self.scenario_manager is None:
+                scenario_manager = ScenarioManager(
+                    map_api,
+                    present_ego_state,
+                    route_roadblocks_ids,
+                    radius=50,
+                )
+                scenario_manager.update_ego_state(present_ego_state)
+                scenario_manager.update_drivable_area_map()
+            else:
+                scenario_manager = self.scenario_manager
+
+            route_roadblocks_ids = scenario_manager.get_route_roadblock_ids()
+            route_reference_path = scenario_manager.update_ego_path()
+            scenario_manager.update_obstacle_map(
+                tracked_objects_list[present_idx], traffic_light_status
+            )
+
+            data = {}
+
+            data["current_state"] = self._get_ego_current_state(
+                ego_state_list[present_idx], ego_state_list[present_idx - 1]
+            )
+
+            ego_features = self._get_ego_features(ego_states=ego_state_list)
+            agent_features, agent_tokens, agents_polygon = self._get_agent_features(
+                query_xy=query_xy,
+                present_idx=present_idx,
+                tracked_objects_list=tracked_objects_list,
+            )
+
+            data["agent"] = {}
+            for k in agent_features.keys():
+                data["agent"][k] = np.concatenate(
+                    [ego_features[k][None, ...], agent_features[k]], axis=0
+                )
+            agent_tokens = ["ego"] + agent_tokens
+
+            if inference:
+                data["agent_tokens"] = agent_tokens
+
+            data["static_objects"] = self._get_static_objects_features(
+                present_ego_state, scenario_manager, tracked_objects_list[present_idx]
+            )
+
+            data["map"], map_polygon_tokens = self._get_map_features(
+                map_api=map_api,
+                query_xy=query_xy,
+                route_roadblock_ids=route_roadblocks_ids,
+                traffic_light_status=traffic_light_status,
+                radius=self.radius,
+            )
+
+            if not inference:
+                data["causal"] = self.scenario_casual_reasoning_preprocess(
+                    present_ego_state,
+                    scenario_manager,
+                    agent_tokens,
+                    map_polygon_tokens,
+                    ego_state_list[self.history_samples + 1 :],
+                )
+                data["causal"]["interaction_label"] = self._get_interaction_label(
+                    ego_features, agent_features
+                )
+                data["agent"]["valid_mask"][0, self.history_samples + 1 :] = data["causal"][
+                    "fixed_ego_future_valid_mask"
+                ]
+
+                cost_map_manager = CostMapManager(
+                    origin=present_ego_state.rear_axle.array,
+                    angle=present_ego_state.rear_axle.heading,
+                    height=600,
+                    width=600,
+                    resolution=0.2,
+                    map_api=map_api,
+                )
+                cost_maps = cost_map_manager.build_cost_maps(
+                    static_objects=tracked_objects_list[present_idx].get_static_objects(),
+                    agents=agent_features,
+                    agents_polygon=agents_polygon,
+                    route_roadblock_ids=set(route_roadblocks_ids),
+                )
+                data["cost_maps"] = cost_maps["cost_maps"]
+
+            if self.build_reference_line:
+                data["reference_line"] = self._get_reference_line_feature(
+                    scenario_manager, ego_features
+                )
+
+            return PlutoFeature.normalize(data, first_time=True, radius=self.radius)
+
+
+##############################################################################
+
+
+
+
     def _build_feature(
         self,
         present_idx: int,
         ego_state_list: List[EgoState],
+        ego_state_list_29: List[EgoState],
+        ego_state_list_28: List[EgoState],
+        ego_state_list_27: List[EgoState],
+        ego_state_list_26: List[EgoState],
+        ego_state_list_25: List[EgoState],
+        ego_state_list_24: List[EgoState],
+        
         tracked_objects_list: List[TrackedObjects],
-        route_roadblocks_ids: list[int],
+        tracked_objects_list_29: List[TrackedObjects],
+        tracked_objects_list_28: List[TrackedObjects],
+        tracked_objects_list_27: List[TrackedObjects],
+        tracked_objects_list_26: List[TrackedObjects],
+        tracked_objects_list_25: List[TrackedObjects],
+        tracked_objects_list_24: List[TrackedObjects],
+        
+        # route_roadblocks_ids: list[int],
+        route_roadblocks_ids: dict,  # 这里定义为字典类型
+  
         map_api: AbstractMap,
         mission_goal: StateSE2,
+        
         traffic_light_status: List[TrafficLightStatusData] = None,
+        traffic_light_status_29: List[TrafficLightStatusData] = None,
+        traffic_light_status_28: List[TrafficLightStatusData] = None,
+        traffic_light_status_27: List[TrafficLightStatusData] = None,
+        traffic_light_status_26: List[TrafficLightStatusData] = None,
+        traffic_light_status_25: List[TrafficLightStatusData] = None,
+        traffic_light_status_24: List[TrafficLightStatusData] = None,
+        
         inference: bool = False,
     ):
+        
+        
+        
+        ego_state_lists = {
+            29: ego_state_list_29,
+            28: ego_state_list_28,
+            27: ego_state_list_27,
+            26: ego_state_list_26,
+            25: ego_state_list_25,
+            24: ego_state_list_24,
+        }
+        
+        
+        tracked_objects_lists={
+            29: tracked_objects_list_29,
+            28: tracked_objects_list_28,
+            27: tracked_objects_list_27,
+            26: tracked_objects_list_26,
+            25: tracked_objects_list_25,
+            24: tracked_objects_list_24,
+        }
+        # print(f"这个track——29的类型是 {type(tracked_objects_list_29)}")#已经是list了
+        
+        traffic_light_status_lists = {
+            29: traffic_light_status_29,
+            28: traffic_light_status_28,
+            27: traffic_light_status_27,
+            26: traffic_light_status_26,
+            25: traffic_light_status_25,
+            24: traffic_light_status_24,
+        }
+        
         if present_idx < 0:
             present_idx = len(ego_state_list) + present_idx
 
-        present_ego_state = ego_state_list[present_idx]
+        present_ego_state = ego_state_list[present_idx]#20帧
         query_xy = present_ego_state.center
         traffic_light_status = list(traffic_light_status)  # note: tl is a iterator
+        scenario_manager={}
+        # route_roadblock_ids={}本身初始化就为字典了
 
-        if self.scenario_manager is None:
-            scenario_manager = ScenarioManager(
+        route_reference_path={}
+        if self.scenario_manager["cur"] is None:
+            scenario_manager["cur"] = ScenarioManager(
                 map_api,
                 present_ego_state,
-                route_roadblocks_ids,
+                route_roadblocks_ids["cur"],
                 radius=50,
             )
-            scenario_manager.update_ego_state(present_ego_state)
-            scenario_manager.update_drivable_area_map()
+            scenario_manager["cur"].update_ego_state(present_ego_state)
+            scenario_manager["cur"].update_drivable_area_map()
         else:
-            scenario_manager = self.scenario_manager
+            scenario_manager["cur"] = self.scenario_manager["cur"]
+            
+        route_roadblocks_ids["cur"] = scenario_manager["cur"].get_route_roadblock_ids()
+        route_reference_path["cur"] = scenario_manager["cur"].update_ego_path()
+        
+        # print("注意啦注意啦注意啦！！！cur信息")
+        # print(type(tracked_objects_list[present_idx]))
 
-        route_roadblocks_ids = scenario_manager.get_route_roadblock_ids()
-        route_reference_path = scenario_manager.update_ego_path()
-        scenario_manager.update_obstacle_map(
+        # (wrapped_fn pid=542627) 注意啦注意啦注意啦！！！ [repeated 3x across cluster]
+        # (wrapped_fn pid=542627) <class 'nuplan.common.actor_state.tracked_objects.TrackedObjects'> [repeated 3x across cluster]
+        
+        scenario_manager["cur"].update_obstacle_map(
             tracked_objects_list[present_idx], traffic_light_status
         )
+        
+    
+        for i in range(1, 7): 
+            ego_state_listtt = ego_state_lists[30 - i]
+            tracked_objects_listtt = tracked_objects_lists[30 - i]
+            traffic_light_statusss= traffic_light_status_lists[30 - i]#已经是List了
+            # print(f"注意注意注意type of loights is {type(traffic_light_status_lists[30 - i])}")
+            # traffic_light_statusss=list(traffic_light_statusss)
+            present_ego_statee= ego_state_listtt[present_idx]
+            if self.scenario_manager[f"cur-{i}"] is None:
+                scenario_manager[f"cur-{i}"] = ScenarioManager(
+                    map_api,
+                    present_ego_statee,
+                    route_roadblocks_ids[f"cur-{i}"],
+                    radius=50,
+                )
+                scenario_manager[f"cur-{i}"].update_ego_state(present_ego_statee)
+                scenario_manager[f"cur-{i}"].update_drivable_area_map()
+            else:
+                scenario_manager[f"cur-{i}"] = self.scenario_manager[f"cur-{i}"]
+                
+            route_roadblocks_ids[f"cur-{i}"] = scenario_manager[f"cur-{i}"].get_route_roadblock_ids()
+            route_reference_path[f"cur-{i}"] = scenario_manager[f"cur-{i}"].update_ego_path()
+            scenario_manager[f"cur-{i}"].update_obstacle_map(
+                tracked_objects_listtt[present_idx], traffic_light_statusss
+            )# 从29帧到24帧  30其实是31帧； 29其实是30帧
+        
+        #TODO
 
+        ego_features = {}
+        agent_features={}
+        agent_tokens={}
+        agents_polygon={}
+        map_polygon_tokens={}
+#自车状态  
+        #还是在最开始增加一个维度
         data = {}
-
-        data["current_state"] = self._get_ego_current_state(
+        data["cur"]={}
+        data["cur-1"]={}
+        data["cur-2"]={}
+        data["cur-3"]={}
+        data["cur-4"]={}
+        data["cur-5"]={}
+        data["cur-6"]={}
+        data["cur"]["agent"] = {}
+        data["cur-1"]["agent"]={}
+        data["cur-2"]["agent"]={}
+        data["cur-3"]["agent"]={}
+        data["cur-4"]["agent"]={}
+        data["cur-5"]["agent"]={}
+        data["cur-6"]["agent"]={}
+        
+        data["cur"]["current_state"] = self._get_ego_current_state(
             ego_state_list[present_idx], ego_state_list[present_idx - 1]
         )
+        
+        # present_idx=30
+        ego_features["cur"]=self._get_ego_features(ego_states=ego_state_list)
+        for i in range(1, 7):  # 从29帧到24帧  30其实是31帧； 29其实是30帧
+            
+            # print(f"注意啦注意啦注意啦！！！ cur - {i}  信息")
+            
+            tracked_objects_listtt=tracked_objects_lists[30 - i]
+            ego_state_listtt = ego_state_lists[30 - i]  
+            present_ego_statee= ego_state_listtt[present_idx]
+            traffic_light_statusss= traffic_light_status_lists[30 - i]
+            traffic_light_statusss=list(traffic_light_statusss)
+            data[f"cur-{i}"]["current_state"] = self._get_ego_current_state(ego_state_listtt[present_idx ], ego_state_listtt[present_idx  - 1])
+            ego_features[f"cur-{i}"] = self._get_ego_features(ego_states=ego_state_listtt)
+            agent_features[f"cur-{i}"], agent_tokens[f"cur-{i}"], agents_polygon[f"cur-{i}"] = self._get_agent_features(
+            query_xy=ego_state_listtt[present_idx].center,
+            present_idx=present_idx,
+            tracked_objects_list=tracked_objects_listtt,
+            ) 
+            data[f"cur-{i}"]["static_objects"] = self._get_static_objects_features(present_ego_statee, scenario_manager[f"cur-{i}"], tracked_objects_listtt[present_idx])
 
-        ego_features = self._get_ego_features(ego_states=ego_state_list)
-        agent_features, agent_tokens, agents_polygon = self._get_agent_features(
+            for k in agent_features[f"cur-{i}"].keys():
+                data[f"cur-{i}"]["agent"][k]  = np.concatenate(
+                    [ego_features[f"cur-{i}"][k] [None, ...], agent_features[f"cur-{i}"][k]], axis=0
+                )
+            agent_tokens[f"cur-{i}"] = ["ego"] + agent_tokens[f"cur-{i}"]
+            
+            
+            data[f"cur-{i}"]["map"], map_polygon_tokens[f"cur-{i}"] = self._get_map_features(
+                map_api=map_api,
+                query_xy=present_ego_statee.center,
+                route_roadblock_ids=route_roadblocks_ids[f"cur-{i}"],
+                traffic_light_status=traffic_light_statusss,
+                radius=self.radius,
+            )
+            
+            
+        agent_features["cur"], agent_tokens["cur"], agents_polygon["cur"] = self._get_agent_features(
             query_xy=query_xy,
             present_idx=present_idx,
             tracked_objects_list=tracked_objects_list,
         )
 
-        data["agent"] = {}
-        for k in agent_features.keys():
-            data["agent"][k] = np.concatenate(
-                [ego_features[k][None, ...], agent_features[k]], axis=0
+        
+        data["cur"]["agent"] = {}
+        for k in agent_features["cur"].keys():
+            data["cur"]["agent"][k] = np.concatenate(
+                [ego_features["cur"][k][None, ...], agent_features["cur"][k]], axis=0
             )
-        agent_tokens = ["ego"] + agent_tokens
+        agent_tokens["cur"] = ["ego"] + agent_tokens["cur"]
+        
 
+        #是否推理模式：
         if inference:
-            data["agent_tokens"] = agent_tokens
+            data["cur"]["agent_tokens"] = agent_tokens["cur"]
 
-        data["static_objects"] = self._get_static_objects_features(
-            present_ego_state, scenario_manager, tracked_objects_list[present_idx]
+        #上面循环获得
+        
+        data["cur"]["static_objects"] = self._get_static_objects_features(
+            present_ego_state, scenario_manager["cur"], tracked_objects_list[present_idx]
         )
-
-        data["map"], map_polygon_tokens = self._get_map_features(
+    
+        
+        data["cur"]["map"], map_polygon_tokens["cur"] = self._get_map_features(
             map_api=map_api,
             query_xy=query_xy,
-            route_roadblock_ids=route_roadblocks_ids,
+            route_roadblock_ids=route_roadblocks_ids["cur"],
             traffic_light_status=traffic_light_status,
             radius=self.radius,
         )
 
+
+        #非推理  即 训练模式
         if not inference:
-            data["causal"] = self.scenario_casual_reasoning_preprocess(
+            data["cur"]["causal"] = self.scenario_casual_reasoning_preprocess(
                 present_ego_state,
-                scenario_manager,
-                agent_tokens,
-                map_polygon_tokens,
+                scenario_manager["cur"],
+                agent_tokens["cur"],
+                map_polygon_tokens["cur"],
                 ego_state_list[self.history_samples + 1 :],
             )
-            data["causal"]["interaction_label"] = self._get_interaction_label(
-                ego_features, agent_features
+            data["cur"]["causal"]["interaction_label"] = self._get_interaction_label(
+                ego_features["cur"], agent_features["cur"]
             )
-            data["agent"]["valid_mask"][0, self.history_samples + 1 :] = data["causal"][
-                "fixed_ego_future_valid_mask"
-            ]
-
-            cost_map_manager = CostMapManager(
+            data["cur"]["agent"]["valid_mask"][0, self.history_samples + 1 :] = data["cur"]["causal"][ "fixed_ego_future_valid_mask"]
+            
+            
+            cost_map_manager= CostMapManager(
                 origin=present_ego_state.rear_axle.array,
                 angle=present_ego_state.rear_axle.heading,
                 height=600,
@@ -273,16 +673,60 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
             )
             cost_maps = cost_map_manager.build_cost_maps(
                 static_objects=tracked_objects_list[present_idx].get_static_objects(),
-                agents=agent_features,
-                agents_polygon=agents_polygon,
-                route_roadblock_ids=set(route_roadblocks_ids),
+                agents=agent_features["cur"],
+                agents_polygon=agents_polygon["cur"],
+                route_roadblock_ids=set(route_roadblocks_ids["cur"]),
             )
-            data["cost_maps"] = cost_maps["cost_maps"]
+            data["cur"]["cost_maps"] = cost_maps["cost_maps"]
+            
+
+            for i in range(1, 7):     
+            # for i in range(1, 7):  # 从29帧到24帧  30其实是31帧； 29其实是30帧  
+                ego_state_listtt = ego_state_lists[30 - i]
+                present_ego_statee=ego_state_listtt[present_idx]
+                tracked_objects_listtt=tracked_objects_lists[30 - i]
+                
+                data[f"cur-{i}"]["causal"] = self.scenario_casual_reasoning_preprocess(
+                present_ego_statee,
+                scenario_manager[f"cur-{i}"],
+                agent_tokens[f"cur-{i}"],
+                map_polygon_tokens[f"cur-{i}"],
+                ego_state_listtt[self.history_samples + 1 :],
+                )
+                
+                
+                data[f"cur-{i}"]["causal"]["interaction_label"] = self._get_interaction_label(
+                ego_features[f"cur-{i}"], agent_features[f"cur-{i}"]
+                )
+                data[f"cur-{i}"]["agent"]["valid_mask"][0, self.history_samples + 1 :] = data[f"cur-{i}"]["causal"][ "fixed_ego_future_valid_mask"]
+                
+                cost_map_manager = CostMapManager(
+                    origin=present_ego_statee.rear_axle.array,
+                    angle=present_ego_statee.rear_axle.heading,
+                    height=600,
+                    width=600,
+                    resolution=0.2,
+                    map_api=map_api,
+                )
+                cost_maps = cost_map_manager.build_cost_maps(
+                    static_objects=tracked_objects_listtt[present_idx].get_static_objects(),
+                    agents=agent_features[f"cur-{i}"],
+                    agents_polygon=agents_polygon[f"cur-{i}"],
+                    route_roadblock_ids=set(route_roadblocks_ids[f"cur-{i}"]),
+                )
+                data[f"cur-{i}"]["cost_maps"] = cost_maps["cost_maps"]
 
         if self.build_reference_line:
-            data["reference_line"] = self._get_reference_line_feature(
-                scenario_manager, ego_features
+            data["cur"]["reference_line"] = self._get_reference_line_feature(
+                scenario_manager["cur"], ego_features["cur"]
             )
+
+            for i in range(1, 7): 
+                data[f"cur-{i}"] ["reference_line"]= self._get_reference_line_feature(
+                    scenario_manager[f"cur-{i}"], ego_features[f"cur-{i}"]
+                    
+                )
+
 
         return PlutoFeature.normalize(data, first_time=True, radius=self.radius)
 
@@ -391,7 +835,7 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
         velocity = np.zeros((T, 2), dtype=np.float64)
         acceleration = np.zeros((T, 2), dtype=np.float64)
         shape = np.zeros((T, 2), dtype=np.float64)
-        valid_mask = np.ones(T, dtype=np.bool)
+        valid_mask = np.ones(T, dtype=np.bool_)
 
         for t, state in enumerate(ego_states):
             position[t] = state.rear_axle.array
@@ -437,7 +881,7 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
         velocity = np.zeros((N, T, 2), dtype=np.float64)
         shape = np.zeros((N, T, 2), dtype=np.float64)
         category = np.zeros((N,), dtype=np.int8)
-        valid_mask = np.zeros((N, T), dtype=np.bool)
+        valid_mask = np.zeros((N, T), dtype=np.bool_)
         polygon = [None] * N
 
         if N == 0 or self.disable_agent:
@@ -520,10 +964,10 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
 
         if len(static_objects) > 0:
             static_objects = np.stack(static_objects, axis=0)
-            valid_mask = np.ones(len(static_objects), dtype=np.bool)
+            valid_mask = np.ones(len(static_objects), dtype=np.bool_)
         else:
             static_objects = np.zeros((0, 6), dtype=np.float64)
-            valid_mask = np.zeros(0, dtype=np.bool)
+            valid_mask = np.zeros(0, dtype=np.bool_)
 
         return {
             "position": static_objects[:, :2],
@@ -578,10 +1022,10 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
         polygon_position = np.zeros((M, 2), dtype=np.float64)
         polygon_orientation = np.zeros(M, dtype=np.float64)
         polygon_type = np.zeros(M, dtype=np.int8)
-        polygon_on_route = np.zeros(M, dtype=np.bool)
+        polygon_on_route = np.zeros(M, dtype=np.bool_)
         polygon_tl_status = np.zeros(M, dtype=np.int8)
         polygon_speed_limit = np.zeros(M, dtype=np.float64)
-        polygon_has_speed_limit = np.zeros(M, dtype=np.bool)
+        polygon_has_speed_limit = np.zeros(M, dtype=np.bool_)
         polygon_road_block_id = np.zeros(M, dtype=np.int32)
 
         for lane in lane_objects:
@@ -672,12 +1116,19 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
         self, scenario_manager: ScenarioManager, ego_features
     ):
         reference_lines = scenario_manager.get_reference_lines(length=self.radius)
+        
+        # if reference_lines is None or len(reference_lines) == 0:
+            # print("注意注意注意注意注意注意   Warning: reference_lines is empty!")
 
-        n_points = int(self.radius / 1.0)
+        
+        
+
+        n_points = int(self.radius / 1.0)  #所以有120个点
+        
         position = np.zeros((len(reference_lines), n_points, 2), dtype=np.float64)
         vector = np.zeros((len(reference_lines), n_points, 2), dtype=np.float64)
         orientation = np.zeros((len(reference_lines), n_points), dtype=np.float64)
-        valid_mask = np.zeros((len(reference_lines), n_points), dtype=np.bool)
+        valid_mask = np.zeros((len(reference_lines), n_points), dtype=np.bool_)
         future_projection = np.zeros((len(reference_lines), 8, 2), dtype=np.float64)
 
         ego_future = ego_features["position"][self.history_samples + 1 :]
@@ -688,8 +1139,15 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
             future_samples = ego_future[9::10]  # every 1s
             future_samples = [Point(xy) for xy in future_samples]
 
+        
+        
         for i, line in enumerate(reference_lines):
-            subsample = line[::4][: n_points + 1]
+            subsample = line[::4][: n_points + 1]  #参考线点进行下采样（每 4 个点取 1 个），限制 最多 n_points + 1 个点。
+            #就是这个n_valid不能等于0，否则全部为false,取反过后就是全部为true
+            
+            
+            # subsample = line[:: max(1, len(line) // (n_points + 1))][: n_points + 1]
+            
             n_valid = len(subsample)
             position[i, : n_valid - 1] = subsample[:-1, :2]
             vector[i, : n_valid - 1] = np.diff(subsample[:, :2], axis=0)
@@ -714,6 +1172,7 @@ class PlutoFeatureBuilder(AbstractFeatureBuilder):
             "valid_mask": valid_mask,
             "future_projection": future_projection,
         }
+
 
     def _sample_discrete_path(self, discrete_path: List[StateSE2], num_points: int):
         path = np.stack([point.array for point in discrete_path], axis=0)
